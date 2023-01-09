@@ -1,61 +1,97 @@
-import { BigInt } from "@graphprotocol/graph-ts"
+import { BigInt, Address } from "@graphprotocol/graph-ts";
 import {
-  NftMarketplace,
+  ItemBought as ItemBoughtEvent,
+  ItemCanceled as ItemCanceledEvent,
+  ItemListed as ItemListedEvent,
+} from "../generated/NftMarketplace/NftMarketplace";
+import {
+  ActiveItem,
   ItemBought,
-  ItemCanceled,
   ItemListed,
-  MetaTransactionExecuted
-} from "../generated/NftMarketplace/NftMarketplace"
-import { ExampleEntity } from "../generated/schema"
+  ItemCanceled,
+} from "../generated/schema";
 
-export function handleItemBought(event: ItemBought): void {
-  // Entities can be loaded from the store using a string ID; this ID
-  // needs to be unique across all entities of the same type
-  let entity = ExampleEntity.load(event.transaction.from.toHex())
+export function handleItemListed(event: ItemListedEvent): void {
+  const id = getIdFromEventParams(
+    event.params.tokenId,
+    event.params.nftAddress
+  );
 
-  // Entities only exist after they have been saved to the store;
-  // `null` checks allow to create entities on demand
-  if (!entity) {
-    entity = new ExampleEntity(event.transaction.from.toHex())
+  let itemListed = ItemListed.load(id);
+  let activeItem = ActiveItem.load(id);
 
-    // Entity fields can be set using simple assignments
-    entity.count = BigInt.fromI32(0)
+  if (!itemListed) {
+    itemListed = new ItemListed(id);
   }
+  if (!activeItem) {
+    activeItem = new ActiveItem(
+      getIdFromEventParams(event.params.tokenId, event.params.nftAddress)
+    );
+  }
+  itemListed.seller = event.params.seller;
+  activeItem.seller = event.params.seller;
 
-  // BigInt and BigDecimal math are supported
-  entity.count = entity.count + BigInt.fromI32(1)
+  itemListed.nftAddress = event.params.nftAddress;
+  activeItem.nftAddress = event.params.nftAddress;
 
-  // Entity fields can be set based on event parameters
-  entity.buyer = event.params.buyer
-  entity.nftAddress = event.params.nftAddress
+  itemListed.tokenId = event.params.tokenId;
+  activeItem.tokenId = event.params.tokenId;
 
-  // Entities can be written to the store with `.save()`
-  entity.save()
+  itemListed.price = event.params.price;
+  activeItem.price = event.params.price;
 
-  // Note: If a handler doesn't require existing field values, it is faster
-  // _not_ to load the entity from the store. Instead, create it fresh with
-  // `new Entity(...)`, set the fields that should be updated and save the
-  // entity back to the store. Fields that were not set or unset remain
-  // unchanged, allowing for partial updates to be applied.
+  activeItem.buyer = Address.fromString(
+    "0x0000000000000000000000000000000000000000"
+  );
 
-  // It is also possible to access smart contracts from mappings. For
-  // example, the contract that has emitted the event can be connected to
-  // with:
-  //
-  // let contract = Contract.bind(event.address)
-  //
-  // The following functions can then be called on this contract to access
-  // state variables and other data:
-  //
-  // - contract.getListing(...)
-  // - contract.getNonce(...)
-  // - contract.getProceeds(...)
+  itemListed.save();
+  activeItem.save();
 }
 
-export function handleItemCanceled(event: ItemCanceled): void {}
+export function handleItemBought(event: ItemBoughtEvent): void {
+  const id = getIdFromEventParams(
+    event.params.tokenId,
+    event.params.nftAddress
+  );
 
-export function handleItemListed(event: ItemListed): void {}
+  let itemBought = ItemBought.load(id);
+  const activeItem = ActiveItem.load(id);
 
-export function handleMetaTransactionExecuted(
-  event: MetaTransactionExecuted
-): void {}
+  if (!itemBought) {
+    itemBought = new ItemBought(id);
+  }
+
+  itemBought.buyer = event.params.buyer;
+  itemBought.nftAddress = event.params.nftAddress;
+  itemBought.tokenId = event.params.tokenId;
+  activeItem!.buyer = event.params.buyer;
+
+  itemBought.save();
+  activeItem!.save();
+}
+
+export function handleItemCanceled(event: ItemCanceledEvent): void {
+  const id = getIdFromEventParams(
+    event.params.tokenId,
+    event.params.nftAddress
+  );
+  let itemCanceled = ItemCanceled.load(id);
+  const activeItem = ActiveItem.load(id);
+
+  if (!itemCanceled) {
+    itemCanceled = new ItemCanceled(id);
+  }
+  itemCanceled.seller = event.params.seller;
+  itemCanceled.nftAddress = event.params.nftAddress;
+  itemCanceled.tokenId = event.params.tokenId;
+  activeItem!.buyer = Address.fromString(
+    "0x000000000000000000000000000000000000dEaD"
+  );
+
+  itemCanceled.save();
+  activeItem!.save();
+}
+
+function getIdFromEventParams(tokenId: BigInt, nftAddress: Address): string {
+  return tokenId.toHexString() + nftAddress.toHexString();
+}
